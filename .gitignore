@@ -1,0 +1,80 @@
+# =========================
+# Agent - Python
+# =========================
+
+agent/.venv/
+agent/venv/
+agent/__pycache__/
+agent/**/__pycache__/
+agent/*.pyc
+agent/**/.*.pyc
+
+# Python cache
+agent/.pytest_cache/
+agent/.mypy_cache/
+
+
+# =========================
+# Backend - Go
+# =========================
+
+backend/bin/
+backend/tmp/
+backend/vendor/
+
+# Go test/build files
+backend/*.exe
+backend/*.test
+
+
+# =========================
+# Frontend - Node
+# =========================
+
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+
+# Vite
+frontend/.vite/
+
+# Next.js
+frontend/.next/
+
+# Nuxt
+frontend/.nuxt/
+
+# npm / yarn / pnpm logs
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/pnpm-debug.log*
+
+
+# =========================
+# Environment files
+# =========================
+
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Keep example environment files
+!.env.example
+!**/.env.example
+
+
+# =========================
+# IDE
+# =========================
+
+.idea/
+.vscode/
+
+
+# =========================
+# OS
+# =========================
+
+.DS_Store
+Thumbs.db

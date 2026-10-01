@@ -1,0 +1,38 @@
+services:
+  auth-service:
+    build: .
+    container_name: go-auth-service
+    restart: unless-stopped
+    environment:
+      - APP_ENV=${APP_ENV:-production}
+      - HTTP_PORT=8080
+      - PG_HOST=postgres
+      - PG_PORT=5432
+      - PG_DATABASE=agent_system
+      - PG_USER=${PG_USER:-postgres}
+      - PG_PASSWORD=${PG_PASSWORD:-your_password}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_ISSUER=auth-service
+      - ACCESS_TOKEN_TTL=15m
+      - REFRESH_TOKEN_TTL=168h
+      - AGENT_SERVICE_URL=http://agent-service:1111
+      - AGENT_TIMEOUT=30s
+    ports:
+      - "8080:8080"
+    volumes:
+      - auth_keys:/app/keys
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - agent-net
+
+volumes:
+  auth_keys:
+
+networks:
+  agent-net:
+    external: true
