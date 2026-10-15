@@ -80,6 +80,18 @@ services:
     volumes:
       - kafka_data:/var/lib/kafka/data
 
+    # Kafka 没有官方 healthcheck 命令，用自带的工具探测 broker 可用性。
+    # 注意：KRaft 单节点下 topic 自动创建被关掉了（KAFKA_AUTO_CREATE_TOPICS_ENABLE=false），
+    # 所以 app 启动前要确保 topic 已建好，否则 producer 会一直等 metadata。
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
     networks:
       - agent-net
 

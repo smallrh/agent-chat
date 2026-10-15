@@ -101,6 +101,10 @@ class RetrievalService:
         self._started = False
         logger.info("RetrievalService stopped")
 
+    async def aclose(self):
+        """lifespan shutdown 用的别名（内部资源释放委托给 stop）。"""
+        await self.stop()
+
     # ------------------------------------------------------------------
     # Embedding
     # ------------------------------------------------------------------

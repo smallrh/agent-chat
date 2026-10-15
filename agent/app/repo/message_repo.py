@@ -8,6 +8,7 @@ from fastapi import HTTPException, status
 
 from app.core.config import settings
 from app.kafka.producer import logger
+from app.repo.pg import get_pool
 
 
 class MessageRepository:
@@ -16,20 +17,14 @@ class MessageRepository:
         self.pool: asyncpg.Pool | None = None
 
     async def start(self):
-        self.pool = await asyncpg.create_pool(
-            host=settings.PG_HOST,
-            port=settings.PG_PORT,
-            database=settings.PG_DATABASE,
-            user=settings.PG_USER,
-            password=settings.PG_PASSWORD,
-            min_size=1,
-            max_size=settings.PG_POOL_SIZE,
-        )
+        """取共享连接池（幂等，已有池直接复用）。见 app/repo/pg.py。"""
+        if self.pool is not None:
+            return
+        self.pool = await get_pool()
 
     async def stop(self):
-        if self.pool:
-            await self.pool.close()
-            self.pool = None
+        # 共享池不在这里关闭（别的组件还在用），只解引用。
+        self.pool = None
 
     # ----------------------------------------------------------------
     # conversation ownership 校验
@@ -223,6 +218,14 @@ class MessageRepository:
                 # 3) 写入 messages
                 #    sequence_id 用同事务内子查询原子计算并 RETURNING 拿回来
                 #    ON CONFLICT (message_id) DO NOTHING 保证 Kafka 重放幂等
+                #
+                #    ★ 必须是 DO NOTHING，不能写
+                #      "DO UPDATE SET message_id = EXCLUDED.message_id"：
+                #      那是一句空转 UPDATE，会让 RETURNING 返回**旧行**的
+                #      sequence_id，上层据此 push 到 Redis → 重放时同一条消息
+                #      在 Redis List 里出现两次（最近 20 条被污染）。
+                #      DO NOTHING 时冲突行不返回任何内容 → row 为 None →
+                #      走下面的兜底回查拿真实的 sequence_id。
                 row = await conn.fetchrow(
                     """
                     INSERT INTO messages (
@@ -242,8 +245,7 @@ class MessageRepository:
                          WHERE conversation_id = $2),
                         $6, $7
                     )
-                    ON CONFLICT (message_id)
-                    DO UPDATE SET message_id = EXCLUDED.message_id
+                    ON CONFLICT (message_id) DO NOTHING
                     RETURNING sequence_id
                     """,
                     message_id,
@@ -255,7 +257,8 @@ class MessageRepository:
                     metadata,
                 )
 
-                # 如果 RETURNING 没拿到（ON CONFLICT 时 DO UPDATE 也会返回，保险起见）
+                # 冲突（重放同一条 event）时上面的 INSERT 不返回行 → row 为 None，
+                # 回查已有行的 sequence_id 返回给上层做幂等判断。
                 if row:
                     sequence_id = int(row["sequence_id"])
                 else:

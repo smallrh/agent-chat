@@ -1,0 +1,187 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* === 基础重置 === */
+html,
+body,
+#root {
+  height: 100%;
+}
+
+html {
+  background-color: theme("colors.zinc.50");
+  color: theme("colors.zinc.900");
+  font-family: theme("fontFamily.sans");
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html.dark {
+  background-color: theme("colors.zinc.950");
+  color: theme("colors.zinc.100");
+}
+
+body {
+  margin: 0;
+  line-height: 1.5;
+  font-size: 14px;
+  /* 应用外壳自己管理滚动，禁用整页橡皮筋回弹，避免移动端地址栏抖动 */
+  overscroll-behavior: none;
+}
+
+/* 移动端点击高亮是一块灰色方块，很脏，去掉；用组件自己的 hover/active 反馈 */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* === 基础交互反馈 === */
+/* 说明：这里刻意不做全局的位移/缩放（translateY + scale）动效。
+   全局 transform 会让每个图标按钮在点击时「跳一下」，是廉价的 AI 味动效；
+   统一的过渡只保留颜色/边框/阴影，位移交给具体按钮自行 opt-in。 */
+button,
+[role="button"],
+a {
+  transition: color 150ms cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 150ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 150ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 150ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 只给明确声明了 .press 的按钮保留轻微按压感 */
+.press:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+input,
+textarea,
+select {
+  transition: border-color 150ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* === 细滚动条 === */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: theme("colors.zinc.300");
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: theme("colors.zinc.400");
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: theme("colors.zinc.700");
+}
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: theme("colors.zinc.600");
+}
+
+/* === 选择色 === */
+::selection {
+  background-color: theme("colors.brand.600");
+  color: white;
+}
+
+/* === Markdown 等富文本基础样式（浅/暗通用） === */
+.prose-rich {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.prose-rich pre {
+  font-family: theme("fontFamily.mono");
+  font-size: 12px;
+  background: theme("colors.zinc.100");
+  border: 1px solid theme("colors.zinc.200");
+  border-radius: 12px;
+  padding: 12px 14px;
+  overflow-x: auto;
+}
+html.dark .prose-rich pre {
+  background: theme("colors.zinc.900");
+  border-color: theme("colors.zinc.800");
+}
+
+.prose-rich code:not(pre code) {
+  font-family: theme("fontFamily.mono");
+  font-size: 12px;
+  background: theme("colors.zinc.100");
+  border: 1px solid theme("colors.zinc.200");
+  border-radius: 6px;
+  padding: 1px 5px;
+}
+html.dark .prose-rich code:not(pre code) {
+  background: theme("colors.zinc.900");
+  border-color: theme("colors.zinc.800");
+}
+
+.prose-rich a {
+  color: theme("colors.brand.600");
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+html.dark .prose-rich a {
+  color: theme("colors.brand.400");
+}
+
+.prose-rich h1,
+.prose-rich h2,
+.prose-rich h3,
+.prose-rich h4 {
+  font-weight: 600;
+  margin: 12px 0 8px;
+}
+.prose-rich h1 { font-size: 1.25rem; }
+.prose-rich h2 { font-size: 1.1rem; }
+.prose-rich h3 { font-size: 1rem; }
+
+.prose-rich ul,
+.prose-rich ol {
+  padding-left: 20px;
+  margin: 8px 0;
+}
+.prose-rich li {
+  margin: 2px 0;
+}
+
+.prose-rich blockquote {
+  border-left: 3px solid theme("colors.brand.400");
+  padding-left: 12px;
+  color: theme("colors.zinc.600");
+  margin: 8px 0;
+}
+html.dark .prose-rich blockquote {
+  color: theme("colors.zinc.400");
+}
+
+.prose-rich table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 12px;
+}
+.prose-rich th,
+.prose-rich td {
+  border: 1px solid theme("colors.zinc.200");
+  padding: 6px 10px;
+  text-align: left;
+}
+html.dark .prose-rich th,
+html.dark .prose-rich td {
+  border-color: theme("colors.zinc.800");
+}
+.prose-rich th {
+  background: theme("colors.zinc.50");
+  font-weight: 600;
+}
+html.dark .prose-rich th {
+  background: theme("colors.zinc.900");
+}

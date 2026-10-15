@@ -26,13 +26,23 @@ _EXTRACTION_SYSTEM_PROMPT = """你是一个记忆抽取器。从给定的对话�
   - content: 字符串，具体的记忆内容（例如 "用户是 Java 开发工程师"）
   - importance: 0~1 的浮点数，1.0 = 极度重要，0.3 = 不太重要但值得记
   - slot: 字符串，这条记忆描述的"用户属性槽位"的英文 snake_case key，例如
-          primary_language / residence_city / os / job_title / name / favorite_food / employer。
+          primary_language / residence_city / hometown / os / job_title / name / favorite_food / employer。
           同一个属性在不同时间的取值**必须用同一个 slot**，例如：
             "用户主要使用 Java 开发" 和 "用户目前主要使用 Go 开发" → 都用 primary_language
             "用户住在北京" 和 "用户目前住在深圳"         → 都用 residence_city
             "用户使用 Windows" 和 "用户已经切换到 macOS"  → 都用 os
           这样系统才能只保留该属性的最新值，避免新旧矛盾并存注入。
           如果实在无法归类，用 memory_type 的英文作为 slot（如 preference / location）。
+
+          【重要：语义不同的属性必须用不同 slot，即使 memory_type 相同】
+          同一 memory_type 下往往有多个**语义不同**的属性，混用会被互相覆盖。典型：
+            "我的籍贯是四川" / "我老家在湖南" / "祖籍浙江"
+                → **hometown**（籍贯/老家/祖籍，出生或祖辈所在地）
+            "我目前在广州上班" / "我住在深圳"
+                → **residence_city**（现居地/工作地）
+          二者都属于 location 类，但**绝不能合并成同一个 slot**——
+          否则"问现居地"会答成籍贯（或反之）。
+          同理，多个偏好也要分开：favorite_food / favorite_sport / favorite_music ...
 
 抽取规则：
   1. 只抽**用户说的**内容，不抽 AI 助理的回复
@@ -54,7 +64,7 @@ _EXTRACTION_USER_TEMPLATE = """以下是一组对话消息：
 # 每次修改 _EXTRACTION_SYSTEM_PROMPT / _EXTRACTION_USER_TEMPLATE 手动 bump。
 # 用于在 PG 里区分"哪版 prompt 生成的记忆"，后续查错 / 对比 / 重跑都靠它。
 # ---------------------------------------------------------------------------
-_EXTRACTION_PROMPT_VERSION = "v1"
+_EXTRACTION_PROMPT_VERSION = "v2"
 
 
 def _format_messages(messages: list[dict]) -> str:
@@ -531,7 +541,8 @@ class MemoryWorker:
             self.memory_repo,
             self.qdrant_repo,
         )
-        self.profile_service = ProfileService(self.redis_repo)
+        # 复用本 worker 已有的 PG 连接池，避免 ProfileService 再建一个
+        self.profile_service = ProfileService(self.redis_repo, self.memory_repo)
 
     # =========================
     # 生命周期

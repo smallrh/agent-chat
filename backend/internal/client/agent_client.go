@@ -23,33 +23,52 @@ import (
 // 5. 统一错误处理（区分 502 vs 504）
 type AgentClient struct {
 	cfg  *config.Config
-	http *http.Client
+	http *http.Client // 普通 JSON 请求：整体超时 = AgentTimeout
+	sse  *http.Client // SSE 流式：整体超时 = SSETimeout（长生成不能被 AgentTimeout 切掉）
 }
 
 // NewAgentClient 构造可复用 HTTP Client
+//
+// ★ 为什么要两个 client：
+// http.Client.Timeout 是**整个请求 + 读取响应体**的 deadline，SSE 会一直读下去，
+// 沿用 AgentTimeout（默认 30s）会在 30 秒时把长回答硬切断（表现为「说到一半断掉」）。
+// 因此流式请求单独用一个「整体超时 = SSETimeout、响应头超时 = AgentTimeout」的 client：
+// 既不会让长生成被切，也不会让「连上了但一直不发响应头」把连接吊死。
 func NewAgentClient(cfg *config.Config) *AgentClient {
-	transport := &http.Transport{
-		MaxIdleConns:        100,
-		MaxIdleConnsPerHost: 20,
-		IdleConnTimeout:     90 * time.Second,
-		TLSHandshakeTimeout: 10 * time.Second,
-		// 关键：不允许客户端无限等待
-		ResponseHeaderTimeout: cfg.AgentTimeout,
-		ExpectContinueTimeout: 1 * time.Second,
+	newTransport := func(headerTimeout time.Duration) *http.Transport {
+		return &http.Transport{
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 20,
+			IdleConnTimeout:     90 * time.Second,
+			TLSHandshakeTimeout: 10 * time.Second,
+			// 关键：不允许客户端无限等待响应头
+			ResponseHeaderTimeout: headerTimeout,
+			ExpectContinueTimeout: 1 * time.Second,
+		}
+	}
+
+	sseTimeout := cfg.SSETimeout
+	if sseTimeout <= 0 {
+		sseTimeout = 10 * time.Minute
 	}
 
 	return &AgentClient{
 		cfg: cfg,
 		http: &http.Client{
 			Timeout:   cfg.AgentTimeout,
-			Transport: transport,
+			Transport: newTransport(cfg.AgentTimeout),
+		},
+		sse: &http.Client{
+			Timeout:   sseTimeout,
+			Transport: newTransport(cfg.AgentTimeout),
 		},
 	}
 }
 
 // ProxyToAgent 把请求代理到 Python Agent
 // userUUID: 从 JWT sub 拿到的真实身份（强制覆盖 X-User-Id）
-func (c *AgentClient) ProxyToAgent(ctx context.Context, method string, path string, userUUID string, body []byte, headers http.Header) (*http.Response, error) {
+// stream:   是否为 SSE 流式请求（决定用哪个 http client，见 NewAgentClient 注释）
+func (c *AgentClient) ProxyToAgent(ctx context.Context, method string, path string, userUUID string, body []byte, headers http.Header, stream bool) (*http.Response, error) {
 	targetURL := strings.TrimRight(c.cfg.AgentServiceURL, "/") + path
 
 	// 构造 Request ID（优先从 context 取）
@@ -64,6 +83,7 @@ func (c *AgentClient) ProxyToAgent(ctx context.Context, method string, path stri
 		"user_uuid", userUUID,
 		"request_id", requestID,
 		"client_ip", headers.Get("X-Client-IP"),
+		"stream", stream,
 	)
 
 	var bodyReader io.Reader
@@ -100,7 +120,11 @@ func (c *AgentClient) ProxyToAgent(ctx context.Context, method string, path stri
 	req.Header.Set("X-Request-Id", requestID)
 
 	// ---- 发起请求 ----
-	resp, err := c.http.Do(req)
+	cli := c.http
+	if stream {
+		cli = c.sse
+	}
+	resp, err := cli.Do(req)
 	if err != nil {
 		// 判断超时 vs 连接拒绝
 		if isTimeoutError(err) {

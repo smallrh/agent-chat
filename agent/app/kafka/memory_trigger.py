@@ -14,6 +14,21 @@ _MEMORY_SIGNAL_PATTERNS: list[re.Pattern] = [
     # 偏好 / 习惯
     re.compile(r"我(?:喜欢|讨厌|爱吃|不吃|最爱|常用|总是|一般|通常|习惯)", re.I),
     re.compile(r"(?:偏好|不喜欢|最喜欢)"),
+    # 籍贯 / 所在地 / 身份归属（"我是四川人"/"我来自成都"/"我老家在湖南"/"我住在北京"）
+    # 注：以"人"结尾并要求后接句末或标点/空白，避免把"我是好人"这类口语过度泛化
+    re.compile(
+        r"我是(?:一个|一名|名|位|个)?\s*\S{1,12}?人(?=$|[，。,.！!？?、；;\s])",
+        re.I,
+    ),
+    # 注意："我的籍贯是四川" 中间有个"的"，故需覆盖 的籍贯是/的祖籍 等变体；
+    # 长分支要写在短分支前面（正则分支是顺序匹配）。
+    re.compile(
+        r"我(?:来自|老家在|老家是|的老家在|的老家|老家"
+        r"|籍贯是|的籍贯是|的籍贯|籍贯"
+        r"|祖籍是|的祖籍是|的祖籍|祖籍"
+        r"|户籍是|现居|定居在|居住在|住在)\s*\S+",
+        re.I,
+    ),
 ]
 
 
@@ -23,11 +38,15 @@ class MemoryTrigger:
 
     触发策略（满足任一即可）：
       1. 周期触发：每 N 条消息（例如 10 条）做一次
-      2. 信号触发：最近消息里包含身份/偏好/事实类关键词
+      2. 早期触发：会话开头几条（用户常在此自报家门），保证短会话也至少抽一次
+      3. 信号触发：最近消息里包含身份/偏好/事实类关键词
     """
 
-    def __init__(self, cycle_threshold: int = 10):
+    def __init__(self, cycle_threshold: int = 10, early_threshold: int = 1):
         self.cycle_threshold = cycle_threshold
+        # early_threshold=1 表示"会话第 1 条消息必抽一次"；
+        # 置 0 可关闭（避免每个新会话都多一次 LLM 抽取开销）。
+        self.early_threshold = early_threshold
 
     async def should_extract(
         self,
@@ -48,6 +67,20 @@ class MemoryTrigger:
         latest = messages[-1]
         latest_sequence_id = latest.get("sequence_id")
         latest_content = latest.get("content", "")
+
+        # 早期触发：会话开头几条必抽一次。
+        # 解决"短会话（<10 条）且未命中任何信号正则 → 事实永远不会被记下"的漏网问题
+        # （例如用户在会话 A 第一句说"我是四川人"，之后就不再触发抽取）。
+        if (
+            self.early_threshold
+            and latest_sequence_id is not None
+            and 0 < latest_sequence_id <= self.early_threshold
+        ):
+            logger.info(
+                "MemoryTrigger: early hit (sequence_id=%s <= %s)",
+                latest_sequence_id, self.early_threshold,
+            )
+            return True
 
         # 周期触发：用 sequence_id
         if (

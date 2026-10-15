@@ -6,6 +6,7 @@ from typing import Any
 import asyncpg
 
 from app.core.config import settings
+from app.repo.pg import get_pool
 
 logger = logging.getLogger(__name__)
 
@@ -33,22 +34,15 @@ class OutboxRepository:
     # --------------------------------------------------------------
 
     async def start(self):
-        self.pool = await asyncpg.create_pool(
-            host=settings.PG_HOST,
-            port=settings.PG_PORT,
-            database=settings.PG_DATABASE,
-            user=settings.PG_USER,
-            password=settings.PG_PASSWORD,
-            min_size=1,
-            max_size=10,
-        )
-        logger.info("OutboxRepository pool started")
+        """取共享连接池（幂等，已有池直接复用）。见 app/repo/pg.py。"""
+        if self.pool is not None:
+            return
+        self.pool = await get_pool()
+        logger.info("OutboxRepository started (shared PostgreSQL pool)")
 
     async def stop(self):
-        if self.pool:
-            await self.pool.close()
-            self.pool = None
-        logger.info("OutboxRepository pool stopped")
+        # 共享池不在这里关闭（别的组件还在用），只解引用。
+        self.pool = None
 
     # --------------------------------------------------------------
     # 写入（Chat API 路径调用）

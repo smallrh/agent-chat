@@ -205,11 +205,19 @@ class KafkaMemoryConsumer:
                 logger.exception(
                     "[KafkaMemoryConsumer] consumer loop crashed, will retry: %s", e,
                 )
+                # 先把崩溃的实例取出来再置 None —— 顺序反了会对 None 调用
+                # stop()，必然 AttributeError 被下面的 except 吞掉，
+                # 旧 consumer 的心跳线程与 socket 就泄漏了。
+                old = self.consumer
                 self.consumer = None
-                try:
-                    await self.consumer.stop()
-                except Exception:
-                    pass
+                if old is not None:
+                    try:
+                        await old.stop()
+                    except Exception:
+                        logger.exception(
+                            "[KafkaMemoryConsumer] stop broken consumer failed "
+                            "(ignored)"
+                        )
 
     # ====================================================================
     # 反序列化：识别脏数据

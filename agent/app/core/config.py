@@ -9,6 +9,56 @@ class Settings(BaseSettings):
     OPENAI_BASE_URL: str
     OPENAI_MODEL: str
     OPENAI_STREAM: bool
+    # 多步工具循环（ReAct）最大轮次：防止模型反复调用工具停不下来
+    MAX_TOOL_ROUNDS: int = 10
+
+    # LLM 调用超时（秒）：客户端级兜底 + 每次请求级超时。
+    # 非流式 /chat 没有 cancel token，模型卡住会长期占住 worker 线程和连接池，
+    # 这个超时是目前唯一的兜底手段。
+    LLM_TIMEOUT_SECONDS: float = 120.0
+
+    # ---------------------------------------------------------
+    # 工具层（app/tool/）：自动发现 + 执行护栏
+    # ---------------------------------------------------------
+    # 关闭后注册表为空（用于排障：逐个排除工具干扰）
+    TOOL_DISCOVERY_ENABLED :bool = True
+
+    # 默认单次调用超时（秒）。工具可以用 TOOL_CONFIG 里的 timeout 覆盖。
+    # 注意：同步工具跑在线程里，超时只是"调用方不等了"，线程不会被杀，
+    # 因此工具自身仍必须内置资源上限（如 code_runner 的 subprocess timeout）。
+    TOOL_DEFAULT_TIMEOUT :float = 20.0
+
+    # 失败重试次数（不含首次）；0 = 不重试
+    TOOL_MAX_RETRIES :int = 1
+    # 指数退避基数（秒）
+    TOOL_RETRY_BACKOFF :float = 0.5
+
+    # 熔断：连续失败多少次后开闸 + 冷却秒数
+    TOOL_CIRCUIT_THRESHOLD :int = 5
+    TOOL_CIRCUIT_RESET_SECONDS :float = 60.0
+
+    # 按 user_id 限流：单个工具每分钟最多调用几次；0 = 不限。
+    # 工具可用 TOOL_CONFIG 的 quota_per_minute 覆盖（例如联网搜索配小一点）。
+    TOOL_DEFAULT_QUOTA_PER_MINUTE :int = 60
+
+    # 同步工具执行线程池大小
+    TOOL_EXECUTOR_WORKERS :int = 8
+
+    # 本轮有多个独立工具调用时并发执行（无依赖的工具，如同时查天气和当前时间）。
+    # 注意：并发不改变 messages 里的顺序，结果仍按 tool_calls 原始顺序回填。
+    TOOL_PARALLEL_ENABLED :bool = True
+    # 单轮最多并发多少个工具（超出则退回串行，避免一次把线程池打满）
+    TOOL_MAX_PARALLEL :int = 4
+
+    # 审计日志是否落参数内容（含用户隐私，默认只记参数名与长度）
+    TOOL_AUDIT_LOG_ARGS :bool = False
+
+    # -------- 可观测性 --------
+    # 是否开启 /metrics 端点（关掉后返回 404）
+    METRICS_ENABLED :bool = True
+    # 访问 /metrics 需要的请求头 X-Metrics-Token；留空表示不校验
+    # （生产建议配上，或在 Go 网关层直接禁掉 /metrics /readyz 的外部访问）
+    METRICS_TOKEN :str = ""
 
     # Embedding（LM Studio 本地 nomic-embed-text，OpenAI 兼容）
     # 注意：OpenAI SDK 会在 base_url 后面自动拼 /embeddings，
@@ -21,6 +71,82 @@ class Settings(BaseSettings):
 
     GEOCODING_URL:str
     WEATHER_URL:str
+
+    # 联网搜索（web_search 工具用）
+    # 默认提供方 exa：走 Exa OpenAI 兼容 Responses API（model="agent"），
+    # 需配置 EXA_API_KEY；未单独配置时回退到 WEB_SEARCH_API_KEY。
+    # 设为 tavily 可切换回 Tavily（用 WEB_SEARCH_API_KEY）。
+    # 注意：这两个 Key 属于密钥，**不要**在代码里写默认值，必须从 .env 注入。
+    # （历史遗留：WEB_SEARCH_API_KEY 曾硬编码真实 Key，已迁移到 agent/.env）
+    EXA_API_KEY: str = ""
+    WEB_SEARCH_API_KEY: str = ""
+    WEB_SEARCH_PROVIDER: str = "exa"
+
+    # ---------------------------------------------------------
+    # 事实 grounding（P0：引用强制 + 禁止无结果编造）
+    # ---------------------------------------------------------
+    # 总开关：关闭后回退到优化前的行为（只靠提示词约束）。
+    GROUNDING_ENABLED: bool = True
+    # 工具结果为空/失败时，往模型上下文里注入「禁止编造」提醒
+    GROUNDING_INJECT_REMINDER: bool = True
+    # 最终答案里出现「工具原文中不存在的 URL」时是否直接剔除。
+    # 默认 False：只记告警日志，不动正文（避免误删模型自己拼的合法链接）。
+    GROUNDING_STRIP_UNKNOWN_URLS: bool = False
+    # 检索明确失败/无结果时，是否在答案末尾追加「未能核实」的降级说明
+    GROUNDING_APPEND_FAILURE_NOTE: bool = True
+
+    # ---------------------------------------------------------
+    # 搜索去重（P1：相似 query 不二次搜索）
+    # ---------------------------------------------------------
+    # 除「完全相同的 query」外，是否也复用「高度相似的 query」的结果。
+    # 典型场景：模型把「广州天河酒店」改成「广州天河区酒店推荐」再搜一遍。
+    SEARCH_DEDUP_SIMILAR_ENABLED: bool = True
+    # 相似度阈值（0~1，交集 / 较小集合的 token 数）。0.72 为经验值：
+    # 既能吃掉「换个近义词」，又不会让「广州酒店」吃掉「北京酒店」。
+    SEARCH_DEDUP_SIMILARITY: float = 0.72
+    # 单轮对话（一次用户提问）内 web_search 最多调用几次。
+    # 0 = 不限。设 2 表示「允许一次失败后改写关键词重试」，堵住反复搜索。
+    SEARCH_MAX_CALLS_PER_TURN: int = 2
+
+    # ---------------------------------------------------------
+    # 后台任务队列（P2：真 worker）
+    # ---------------------------------------------------------
+    # 单用户同时在跑（pending/running）的任务上限。
+    # 后台任务各自占 LLM + 检索配额，不设上限时「连点 10 次建任务」
+    # 会直接把 Agent 的线程池和搜索预算打满，连正常对话都变慢。
+    TASK_MAX_ACTIVE_PER_USER: int = 3
+    # 全局同时在跑的任务上限（单实例部署下的兜底）
+    TASK_MAX_ACTIVE_GLOBAL: int = 20
+    # research worker：最多拆几个检索词
+    TASK_RESEARCH_MAX_QUERIES: int = 3
+    # research worker：每个检索词取多少条结果
+    TASK_RESEARCH_TOP_K: int = 5
+    # research worker：单次 LLM 调用超时（秒）（规划 / 汇总各一次）
+    TASK_RESEARCH_LLM_TIMEOUT: float = 120.0
+    # research worker：注入给汇总 LLM 的资料原文长度上限（字符）
+    TASK_RESEARCH_MAX_EVIDENCE_CHARS: int = 12000
+
+    # ---------------------------------------------------------
+    # 附件 / 多模态（P2）
+    # ---------------------------------------------------------
+    # 附件落盘目录（相对 agent/ 或绝对路径均可）
+    ATTACHMENT_DIR: str = "./data/attachments"
+    # 单个附件大小上限（字节），默认 10MB
+    ATTACHMENT_MAX_BYTES: int = 10 * 1024 * 1024
+    # 单条消息最多带几个附件
+    ATTACHMENT_MAX_PER_MESSAGE: int = 5
+    # 注入给 LLM 的单个附件文本长度上限（字符），超出截断
+    ATTACHMENT_MAX_TEXT_CHARS: int = 8000
+    # 是否把图片以 base64 多模态内容块发给模型。
+    # 关闭时图片退化成「（图片：xxx.png）」占位文本注入 ——
+    # 用于模型不支持 vision 时避免 400。
+    ATTACHMENT_IMAGE_ENABLED: bool = True
+    # 允许上传的 MIME 白名单前缀（逗号分隔；空 = 不限制）
+    ATTACHMENT_ALLOWED_MIME_PREFIXES: str = (
+        "image/,text/,application/pdf,application/json,"
+        "application/vnd.openxmlformats-officedocument,"
+        "application/vnd.ms-excel,application/msword"
+    )
 
     # =========================================================
     # 持久化存储配置（Docker 容器）

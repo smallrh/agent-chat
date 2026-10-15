@@ -1,0 +1,52 @@
+# Agent 服务本体（与 agent-infra/docker-compose.yml 分开，方便本地只用 infra）
+#
+# 用法：
+#   1) 先起基础设施（会各自 healthcheck）：
+#        docker compose -f agent-infra/docker-compose.yml up -d
+#   2) 等它们 healthy 后再起 app：
+#        docker compose -f docker-compose.app.yml up -d
+#
+# 之所以用 `condition: service_healthy` 而不是默认的 `started`：
+# 容器「进程起来了」不等于「可用」—— 这正是之前 Qdrant 晚几秒就绪
+# 导致连接假死的原因。依赖编排层的 healthcheck 才是根治办法。
+
+services:
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agent-app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # 容器里不要开 reload（会起父子进程，健康检查与信号都不好处理）
+      RELOAD: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=5)"
+      interval: 15s
+      timeout: 8s
+      retries: 5
+      start_period: 30s
+    networks:
+      - agent-net
+
+# 复用 agent-infra 里已经创建好的网络（所以要先起 infra）
+networks:
+  agent-net:
+    external: true

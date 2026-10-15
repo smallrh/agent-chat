@@ -107,7 +107,7 @@ func TestMain(m *testing.M) {
 	gin.SetMode(gin.ReleaseMode)
 	authHandler := handler.NewAuthHandler(authSvc)
 	healthHandler := handler.NewHealthHandler(database)
-	testRouter = router.New(authHandler, healthHandler, tokenSvc, agentClient, rlSvc)
+	testRouter = router.New(authHandler, healthHandler, tokenSvc, agentClient, rlSvc, handler.NewConversationHandler(agentClient))
 
 	// 启动测试用 HTTP Server（18081 端口）
 	srv := &http.Server{

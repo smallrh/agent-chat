@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from app.core.auth import get_current_user_id
 from app.req.chat_req import ChatRequest
@@ -54,3 +55,33 @@ async def chat_stream(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+class CancelRequest(BaseModel):
+    run_id: str
+
+
+@router.post("/chat/cancel")
+async def chat_cancel(
+    body: CancelRequest,
+    user_id: int = Depends(get_current_user_id),
+):
+    """取消一个正在进行的流式生成（前端「停止生成」时调用）。
+
+    通过 run_id 找到对应 RunToken 并置位取消标志；Agent 在生成过程中
+    （每读一段 / 每个工具执行前）检查到该标志会抛 AgentCancelled 提前结束，
+    随后走正常的尾部事件（message.end/agent.end/done）并落库部分内容。
+    """
+    from app.agent.cancel import get_token
+
+    token = get_token(body.run_id)
+    if token is None:
+        # 已经结束 / 不存在：幂等返回成功，避免前端误报
+        return {"ok": True, "cancelled": False}
+    if token.user_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Run does not belong to current user.",
+        )
+    token.cancel()
+    return {"ok": True, "cancelled": True}

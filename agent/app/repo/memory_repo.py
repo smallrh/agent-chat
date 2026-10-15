@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 import asyncpg
 
 from app.core.config import settings
+from app.repo.pg import get_pool
 
 logger = logging.getLogger(__name__)
 
@@ -46,22 +47,24 @@ class MemoryRepository:
         self.pool: asyncpg.Pool | None = None
 
     async def start(self):
-        self.pool = await asyncpg.create_pool(
-            host=settings.PG_HOST,
-            port=settings.PG_PORT,
-            database=settings.PG_DATABASE,
-            user=settings.PG_USER,
-            password=settings.PG_PASSWORD,
-            min_size=1,
-            max_size=settings.PG_POOL_SIZE,
-        )
-        logger.info("MemoryRepository started (PostgreSQL pool)")
+        """
+        取共享连接池（幂等）。
+
+        注意两点：
+          1. 幂等 —— 已有池直接复用。原先这里无条件 create_pool 覆盖，
+             导致「ProfileService 复用 MemoryWorker 的 repo」时把对方的连接池
+             偷偷换掉，旧池泄漏、共享意图落空。
+          2. 不再自建设/disconnect 独立的池 —— 全进程共用一个（见 app/repo/pg.py），
+             stop() 只解引用，真正的关闭交给 lifespan 的 close_pool()。
+        """
+        if self.pool is not None:
+            return
+        self.pool = await get_pool()
+        logger.info("MemoryRepository started (shared PostgreSQL pool)")
 
     async def stop(self):
-        if self.pool:
-            await self.pool.close()
-            self.pool = None
-        logger.info("MemoryRepository stopped")
+        # 共享池不在这里关闭（别的组件还在用），只解引用。
+        self.pool = None
 
     async def save(self, user_id: int, memory: dict) -> str | None:
         """

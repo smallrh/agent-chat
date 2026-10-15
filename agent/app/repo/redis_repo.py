@@ -1,8 +1,12 @@
 import json
+import logging
 
 import redis.asyncio as redis
 
 from app.core.config import settings
+
+
+logger = logging.getLogger(__name__)
 
 
 class RedisRepository:
@@ -15,6 +19,28 @@ class RedisRepository:
     # =========================
 
     async def start(self):
+        """
+        建立 Redis 客户端（幂等）。
+
+        原先这里无条件重建 client：任何组件（如 ProfileService 复用 worker 的
+        repo）再调一次 start() 就会**换掉整个 client**，旧连接泄漏。
+        现在已有 client 且能 ping 通就直接复用。
+        """
+        if self.client is not None:
+            try:
+                await self.client.ping()
+                return
+            except Exception:
+                # client 坏了（连接已被服务端关掉 / 进程 fork 后失效）→ 重建
+                logger.warning(
+                    "RedisRepository: existing client unhealthy, reconnecting",
+                )
+                try:
+                    await self.client.aclose()
+                except Exception:
+                    pass
+                self.client = None
+
         self.client = redis.Redis(
             host=settings.REDIS_HOST,
             port=settings.REDIS_PORT,
@@ -77,6 +103,19 @@ class RedisRepository:
             "sequence_id": event.get("sequence_id"),
             "timestamp": event["timestamp"],
         }
+
+        # ★ 幂等：Kafka 重放会对同一条 event 再走一遍这里。
+        #   Redis List 没有去重能力，直接 lpush 会让「最近 20 条」里出现两条
+        #   内容相同消息。这里先扫一遍现有窗口，命中同 message_id 就跳过写入
+        #   （20 条的窗口很小，一次 lrange 的代价可以忽略）。
+        existing = await self.client.lrange(key, 0, 19)
+        for item in existing:
+            try:
+                if json.loads(item).get("message_id") == event["message_id"]:
+                    return
+            except (ValueError, TypeError):
+                # 脏数据不阻塞写入
+                continue
 
         await self.client.lpush(
             key,

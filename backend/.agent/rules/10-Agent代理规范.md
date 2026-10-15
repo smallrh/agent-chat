@@ -157,14 +157,17 @@ Go Auth 不解析 Agent 返回的 JSON，原样透传。好处：
 
 ### SSE 流式响应
 
-`io.Copy` 天然支持流式转发（`c.Writer` 的 io.Writer 接口 + `resp.Body` 的 io.Reader 接口），**当前实现已支持 SSE**。
+`io.Copy` 本身能透传流式数据（`c.Writer` 的 `io.Writer` + `resp.Body` 的 `io.Reader`），但 **Gin 的 `c.Writer` 默认带 4096 字节写缓冲**：`io.Copy` 不会在每次 `Write` 后主动 `Flush`，SSE 事件要攒到缓冲满（或响应结束）才推给客户端，表现为"一卡一卡 / 一次性吐出"。
+
+因此当前实现用 `flushWriter` 包装 `c.Writer`，**每个 SSE 事件写入后立即 `http.Flusher.Flush()`**（不支持 Flush 时安全降级为普通写入）。是否为 SSE 由 `isStreamingResponse()` 按响应 `Content-Type` 是否含 `text/event-stream` 判断：命中则走 `flushWriter` 逐块强制刷出；普通 JSON 响应仍直连 `io.Copy`，避免无谓的 Flush 开销。
 
 但需要注意：
 
-1. **必须提前写 Response Header**：`c.Status(resp.StatusCode)` + `c.Writer.WriteHeaderNow()` —— 在 `io.Copy` 之前，避免 Gin 缓冲
-2. **不能用 `c.JSON()` / `c.String()`** —— 否则响应会被 Gin 缓冲
-3. **不能调用 `c.Next()`** —— SSE 要持续写，不能等中间件链完成
-4. **SSE 超时**：`AGENT_TIMEOUT` 配置的是 HTTP Client 总超时，SSE 长连接可能调大（当前实现 `AgentClient.Timeout` 覆盖所有请求，SSE 可能需要单独配置 `AGENT_STREAM_TIMEOUT`）
+1. **必须提前写 Response Header**：`c.Status(resp.StatusCode)` + `c.Writer.WriteHeaderNow()` —— 在透传之前，避免 Gin 缓冲 Header
+2. **必须显式 Flush**：通过 `flushWriter`（包裹 `c.Writer`，每次 `Write` 后调用 `http.Flusher.Flush()`）逐块刷出 SSE 事件，保证客户端实时收到 token
+3. **不能用 `c.JSON()` / `c.String()`** —— 否则响应会被 Gin 缓冲
+4. **不能调用 `c.Next()`** —— SSE 要持续写，不能等中间件链完成
+5. **SSE 超时**：`AGENT_TIMEOUT` 配置的是 HTTP Client 总超时，SSE 长连接可能调大（当前实现 `AgentClient.Timeout` 覆盖所有请求，SSE 可能需要单独配置 `AGENT_STREAM_TIMEOUT`）
 
 ### Body 读取注意事项
 

@@ -42,6 +42,64 @@ func (s *RateLimitService) CheckRegister(ctx context.Context, ip string) error {
 	return s.check(ctx, fmt.Sprintf("register:ip:%s", ip), s.cfg.RegisterIPLimit, s.cfg.RegisterIPWindow)
 }
 
+// CheckChat 对话限流（按 user_uuid 固定窗口；通过后再计数）
+func (s *RateLimitService) CheckChat(ctx context.Context, userUUID string) error {
+	if userUUID == "" || s.cfg.ChatUserLimit <= 0 {
+		return nil
+	}
+	key := fmt.Sprintf("chat:user:%s", userUUID)
+	if err := s.check(ctx, key, s.cfg.ChatUserLimit, s.cfg.ChatUserWindow); err != nil {
+		return err
+	}
+	s.incr(ctx, key, s.cfg.ChatUserWindow)
+	return nil
+}
+
+// AcquireStreamSlot 占用一个「流式对话」并发额度（按 user_uuid 计数，Redis 全局共享）。
+//
+// 与 CheckChat 的关系：CheckChat 管**频率**（每分钟多少次），这里管**并发**（同时几条流）。
+// 只靠频率挡不住「同时开 5 个标签页各问一句」——那会把 Agent 的连接池/线程池打满。
+//
+// 返回 release 函数，调用方必须 defer 执行；Redis 故障一律放行（与 check() 同策略）。
+func (s *RateLimitService) AcquireStreamSlot(ctx context.Context, userUUID string) (func(), error) {
+	noop := func() {}
+	if userUUID == "" || s.cfg.ChatStreamConcurrency <= 0 {
+		return noop, nil
+	}
+
+	key := fmt.Sprintf("chat:stream:%s", userUUID)
+	count, err := s.rdb.Incr(ctx, key).Result()
+	if err != nil {
+		slog.Warn("StreamSlot incr error (degrade to allow)", "key", key, "err", err)
+		return noop, nil
+	}
+	// 兜底 TTL：进程被 kill 时没走到 release，计数靠 TTL 自动清零
+	_ = s.rdb.Expire(ctx, key, s.cfg.ChatStreamTTL).Err()
+
+	if int(count) > s.cfg.ChatStreamConcurrency {
+		// 超限：立刻归还本次 incr
+		_, _ = s.rdb.Decr(ctx, key).Result()
+		slog.Warn("Concurrent stream limit exceeded",
+			"user_uuid", userUUID, "count", count, "limit", s.cfg.ChatStreamConcurrency)
+		return noop, errors.ErrStreamLimitReached
+	}
+
+	var released bool
+	release := func() {
+		if released {
+			return
+		}
+		released = true
+		// 请求 ctx 此时可能已取消/超时，用独立短 ctx 归还，避免计数泄漏
+		rctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if _, err := s.rdb.Decr(rctx, key).Result(); err != nil {
+			slog.Warn("StreamSlot decr error", "key", key, "err", err)
+		}
+	}
+	return release, nil
+}
+
 // RecordLoginFailed 记录登录失败（用于限流计数）
 func (s *RateLimitService) RecordLoginFailed(ctx context.Context, ip, username string) {
 	s.incr(ctx, fmt.Sprintf("login:ip:%s", ip), s.cfg.LoginIPWindow)

@@ -1,0 +1,43 @@
+# 只放工具配置 —— 依赖仍由 requirements.txt 管理（不要在这里再写一份 [project]，
+# 否则会出现两个依赖来源，迟早不一致）。
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+# 根目录的一次性脚本（_patch_*.py / _test_*.py / _db_diag.py …）不进 lint
+exclude = [
+    ".venv",
+    "migrations",
+    "_*.py",
+]
+
+[tool.ruff.lint]
+# E/W 基础风格 + F 未使用/未定义 + I 导入排序 + B bug-prone
+select = ["E", "W", "F", "I", "B", "UP", "C4"]
+ignore = [
+    "B008",   # FastAPI 的 Depends(...) 默认参数写法，是框架惯例
+    "B904",   # 日志里 raise ... from exc 不是每处都必要
+]
+
+[tool.ruff.lint.per-file-ignores]
+# 测试与脚本里允许裸 except / print
+"_*.py" = ["BLE001", "T201"]
+
+[tool.mypy]
+python_version = "3.13"
+# 先收敛到 app/，第三方库缺 stubs 也不会报错
+files = ["app"]
+ignore_missing_imports = true
+warn_unused_ignores = false
+check_untyped_defs = false
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+# 现有脚本是 _test_*.py（含 main()），一并收集；tests/ 下的正式用例是 test_*.py
+python_files = ["test_*.py", "_test_*.py"]
+testpaths = ["tests", "."]
+# 只收集项目根与 tests 目录，别扫进 .venv
+norecursedirs = [".venv", ".git", "migrations", "node_modules", "__pycache__"]
+addopts = "-q"
+filterwarnings = ["ignore::DeprecationWarning"]

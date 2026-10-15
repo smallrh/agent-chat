@@ -1,0 +1,138 @@
+"""并行工具链路耗时诊断（定位"很慢"到底慢在哪）。
+
+设计：分别测量
+  1. 单个工具自身的耗时（含 ToolGuard 开销）
+  2. 一轮里多个工具「并发」vs「串行」的总耗时对比
+  3. 工具结果的大小（大结果会拖慢下一轮 LLM）
+
+运行： .venv/Scripts/python.exe _diag_parallel.py [--with-network]
+
+默认**不调用联网工具**（避免消耗搜索配额），加 --with-network 才会测 web_search/weather。
+"""
+
+import asyncio
+import json
+import sys
+import time
+
+FAILED = 0
+
+
+def check(desc, cond, extra=""):
+    global FAILED
+    if cond:
+        print(f"  [ok] {desc}")
+    else:
+        FAILED += 1
+        print(f"  [FAIL] {desc} {extra}")
+
+
+async def time_call(executor, name, args, ctx, loop):
+    started = time.perf_counter()
+    try:
+        out = await asyncio.to_thread(
+            executor.execute, name, json.dumps(args),
+            user_id=ctx.user_id, conversation_id=ctx.conversation_id,
+            loop=loop,
+        )
+    except Exception as exc:                              # noqa: BLE001
+        out = f"EXC: {exc}"
+    elapsed = time.perf_counter() - started
+    return elapsed, out
+
+
+async def main(argv):
+    from app.tool.context import ToolContext
+    from app.tool.registry import get_meta
+
+    with_network = "--with-network" in argv
+
+    ctx = ToolContext(user_id=1, conversation_id="diag")
+    loop = asyncio.get_running_loop()
+
+    from app.agent.tool_executor import tool_executor
+
+    print("=" * 66)
+    print("并行工具链路耗时诊断")
+    print("=" * 66)
+
+    # ------------------------------------------------------------ 1
+    print("\n[1] 单个工具耗时（含 ToolGuard 开销）")
+
+    cases = [
+        ("current_time", {"timezone": "Asia/Shanghai"}),
+        ("calculator", {"expression": "2**10"}),
+        ("calculator", {"expression": "22**5000"}),   # ← 重点嫌疑
+    ]
+    for name, args in cases:
+        elapsed, out = await time_call(tool_executor, name, args, ctx, loop)
+        print(f"  {name:14s} args={str(args)[:28]:30s} "
+              f"{elapsed * 1000:8.1f} ms  result_len={len(str(out))}")
+
+    _, big = await time_call(
+        tool_executor, "calculator", {"expression": "22**5000"}, ctx, loop
+    )
+    print(f"\n  >>> 22**5000 结果长度 = {len(big)} 字符")
+    print(f"  >>> 这个大字符串会被塞回 messages，成为下一轮 LLM 的输入")
+
+    # ------------------------------------------------------------ 2
+    print("\n[2] 一轮多工具：并发 vs 串行")
+
+    from app.tool.spec import ToolConfig, ToolMeta
+
+    def slow(ms: int):
+        time.sleep(ms / 1000)
+        return "ok"
+
+    meta = ToolMeta(
+        name="diag_slow", impl=slow,
+        definition={"type": "function", "function": {"name": "diag_slow"}},
+        config=ToolConfig(timeout=15, retries=0),
+    )
+
+    from app.tool.guard import tool_guard
+
+    tool_guard.reset()
+
+    start = time.perf_counter()
+    serial = []
+    for _ in range(3):
+        _, o = await time_call(tool_executor, "current_time",
+                               {"timezone": "UTC"}, ctx, loop)
+        serial.append(o)
+    serial_time = time.perf_counter() - start
+
+    start = time.perf_counter()
+    parallel = await asyncio.gather(
+        *[
+            asyncio.to_thread(tool_executor.execute, "current_time",
+                              json.dumps({"timezone": "UTC"}),
+                              user_id=ctx.user_id,
+                              conversation_id=ctx.conversation_id,
+                              loop=loop)
+            for _ in range(3)
+        ]
+    )
+    parallel_time = time.perf_counter() - start
+
+    print(f"  串行 3 次: {serial_time * 1000:8.1f} ms")
+    print(f"  并发 3 次: {parallel_time * 1000:8.1f} ms")
+    speedup = serial_time / parallel_time if parallel_time else 0
+    print(f"  加速比:     {speedup:8.2f}x")
+
+    check("并发确实生效（加速比 > 2x）", speedup > 2.0, f"实际={speedup:.2f}x")
+
+    # ------------------------------------------------------------ 3
+    print("\n[3] 工具结果大小（大结果会拖慢下一轮 LLM）")
+    for name, args in cases:
+        _, out = await time_call(tool_executor, name, args, ctx, loop)
+        size = len(str(out))
+        flag = "  <<< 过大" if size > 2000 else ""
+        print(f"  {name:14s} {size:8d} 字符{flag}")
+
+    print()
+    return 1 if FAILED else 0
+
+
+if __name__ == "__main__":
+    sys.exit(asyncio.run(main(sys.argv[1:])))

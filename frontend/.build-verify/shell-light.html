@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="./assets/index-D2ts9l9S.css" />
+    <style>
+      html, body, #root { height: 100%; }
+      body { margin: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div id="root" class="flex h-[100dvh] w-full flex-col overflow-hidden bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+      <header class="relative z-20 flex h-14 shrink-0 items-center justify-between border-b border-zinc-200 bg-white px-3 dark:border-zinc-800 dark:bg-zinc-900 sm:px-5">
+        <div class="flex min-w-0 items-center gap-2.5">
+          <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand-600 text-white">AI</div>
+          <span class="truncate text-[15px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-base">AI Agent</span>
+        </div>
+        <div class="flex shrink-0 items-center gap-1 sm:gap-1.5">
+          <nav class="hidden items-center gap-0.5 md:flex">
+            <button class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium text-zinc-600 dark:text-zinc-400">任务</button>
+            <button class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium text-zinc-600 dark:text-zinc-400">记忆</button>
+          </nav>
+          <div class="flex items-center gap-0.5 md:hidden">
+            <button class="inline-flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 dark:text-zinc-400">A</button>
+            <button class="inline-flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 dark:text-zinc-400">B</button>
+          </div>
+          <button class="inline-flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 dark:text-zinc-400">C</button>
+          <div class="ml-1 hidden items-center gap-2 border-l border-zinc-200 pl-2.5 sm:flex dark:border-zinc-800">
+            <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-[12px] font-semibold uppercase text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">A</span>
+            <span class="max-w-[100px] truncate text-[13px] font-medium text-zinc-700 dark:text-zinc-300">alice</span>
+            <button class="inline-flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 dark:text-zinc-400">D</button>
+          </div>
+        </div>
+      </header>
+
+      <main class="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+        <div class="flex h-full min-h-0 w-full" id="chatroot">
+          <aside id="sidebar" class="hidden h-full w-full flex-col border-r border-zinc-200 bg-white md:flex dark:border-zinc-800 dark:bg-zinc-900" style="width:268px;flex:0 0 268px">
+            <div class="flex h-12 shrink-0 items-center gap-1.5 border-b border-zinc-200 px-3 dark:border-zinc-800">
+              <span class="min-w-0 flex-1 truncate text-[13px] font-semibold text-zinc-800 dark:text-zinc-100">会话</span>
+              <button class="inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-600 px-2.5 py-1.5 text-xs font-medium text-white">+ 新对话</button>
+            </div>
+            <div class="flex-1 overflow-y-auto px-2 py-2">
+              <div class="group relative mb-0.5 flex items-center gap-1.5 rounded-xl bg-brand-50 pr-1.5 dark:bg-brand-500/10">
+                <span class="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-brand-600 opacity-100 dark:bg-brand-400"></span>
+                <button class="min-w-0 flex-1 py-1.5 pl-2.5 text-left">
+                  <div class="truncate text-[13px] font-medium text-brand-700 dark:text-brand-200">你好，我叫 Alice，我住在…</div>
+                  <div class="truncate text-[11px] text-zinc-400 dark:text-zinc-500">12:11</div>
+                </button>
+              </div>
+              <div class="group relative mb-0.5 flex items-center gap-1.5 rounded-xl pr-1.5">
+                <button class="min-w-0 flex-1 py-1.5 pl-2.5 text-left">
+                  <div class="truncate text-[13px] font-medium text-zinc-700 dark:text-zinc-200">介绍一下我的母校</div>
+                  <div class="truncate text-[11px] text-zinc-400 dark:text-zinc-500">10/9</div>
+                </button>
+              </div>
+            </div>
+          </aside>
+
+          <div id="chatcol" class="flex min-h-0 min-w-0 flex-1 flex-col bg-zinc-50 dark:bg-zinc-950">
+            <header class="flex h-12 shrink-0 items-center gap-2 border-b border-zinc-200 bg-zinc-50/85 px-2.5 dark:border-zinc-800 dark:bg-zinc-950/85 sm:px-4">
+              <button class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-500 md:hidden">M</button>
+              <div class="min-w-0 flex-1 truncate text-[13px] font-semibold text-zinc-800 dark:text-zinc-100">新对话</div>
+              <button class="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-transparent px-3 py-1.5 text-[12px] font-medium text-zinc-500">后台任务</button>
+            </header>
+
+            <div class="flex min-h-0 flex-1">
+              <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+                <div id="scroll" class="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+                  <div id="wrap" class="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 py-6 sm:px-6">
+                    <div id="hero" class="m-auto flex w-full flex-col items-center text-center">
+                      <div class="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-600 text-white">*</div>
+                      <h2 class="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">开始对话</h2>
+                      <p class="mt-1.5 max-w-md text-[13px] leading-relaxed text-zinc-500 dark:text-zinc-400">支持多会话、流式回复、工具调用、附件与后台任务。选一个开始，或直接在下方输入。</p>
+                      <div class="mt-7 grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
+                        <button class="group flex items-center gap-2.5 rounded-2xl border border-zinc-200 bg-white px-3.5 py-3 text-left dark:border-zinc-800 dark:bg-zinc-900/60"><span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800">1</span><span class="min-w-0 flex-1 truncate text-[13px] font-medium text-zinc-700 dark:text-zinc-200">介绍一下你的能力</span></button>
+                        <button class="group flex items-center gap-2.5 rounded-2xl border border-zinc-200 bg-white px-3.5 py-3 text-left dark:border-zinc-800 dark:bg-zinc-900/60"><span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800">2</span><span class="min-w-0 flex-1 truncate text-[13px] font-medium text-zinc-700 dark:text-zinc-200">调研一个话题</span></button>
+                        <button class="group flex items-center gap-2.5 rounded-2xl border border-zinc-200 bg-white px-3.5 py-3 text-left dark:border-zinc-800 dark:bg-zinc-900/60"><span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800">3</span><span class="min-w-0 flex-1 truncate text-[13px] font-medium text-zinc-700 dark:text-zinc-200">查一下天气</span></button>
+                        <button class="group flex items-center gap-2.5 rounded-2xl border border-zinc-200 bg-white px-3.5 py-3 text-left dark:border-zinc-800 dark:bg-zinc-900/60"><span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800">4</span><span class="min-w-0 flex-1 truncate text-[13px] font-medium text-zinc-700 dark:text-zinc-200">记住我的偏好</span></button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div id="inputarea" class="shrink-0 border-t border-zinc-200 bg-zinc-50/85 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-950/85 sm:px-6 sm:py-4">
+                  <div class="mx-auto w-full max-w-3xl">
+                    <div id="inputcard" class="rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+                      <div class="flex items-end gap-2 px-1">
+                        <button class="shrink-0 rounded-xl p-2 text-zinc-500">P</button>
+                        <textarea rows="1" placeholder="输入消息，Enter 发送" class="max-h-32 min-w-0 flex-1 resize-none bg-transparent py-2 text-[14px] outline-none"></textarea>
+                        <button class="shrink-0 rounded-full bg-brand-600 p-2 text-white">S</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+      </div>
+    </div>
+  
+<pre id="__m" style="display:none"></pre>
+<script>
+window.addEventListener('load', function () {
+  var ids = ['root', 'chatroot', 'sidebar', 'chatcol', 'scroll', 'wrap', 'hero', 'inputarea', 'inputcard'];
+  var out = ['viewport=' + window.innerWidth + 'x' + window.innerHeight,
+             'scrollW=' + document.documentElement.scrollWidth + ' clientW=' + document.documentElement.clientWidth,
+             'scrollH=' + document.documentElement.scrollHeight + ' clientH=' + document.documentElement.clientHeight];
+  ids.forEach(function (id) {
+    var e = document.getElementById(id);
+    if (!e) { out.push(id + '=MISSING'); return; }
+    var r = e.getBoundingClientRect();
+    if(id==='wrap'||id==='hero'){var cs=getComputedStyle(e);out.push(id+' CSS box='+cs.boxSizing+' pl='+cs.paddingLeft+' pr='+cs.paddingRight+' w='+cs.width);} out.push(id + '=[l:' + r.left.toFixed(1) + ' t:' + r.top.toFixed(1) + ' w:' + r.width.toFixed(1) + ' h:' + r.height.toFixed(1) + ']');
+  });
+  document.getElementById('__m').textContent = '@@@' + out.join('|') + '@@@';
+});
+</script>
+</body>
+</html>

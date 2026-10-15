@@ -259,3 +259,36 @@ def weather(
         风速：3.0 km/h
         天气代码：1
     """
+
+# ---------------------------------------------------------------------------
+# 工具注册元数据（registry 自动发现，见 app/tool/spec.py）
+# ---------------------------------------------------------------------------
+
+TOOL_SPEC = {
+    "description": (
+        "查询指定城市的天气。"
+        "支持当前天气、今天和未来7天天气。"
+    ),
+    "parameters": {
+        "city": {
+            "type": "string",
+            "description": "城市名称，例如广州、深圳、北京",
+        },
+        "time_range": {
+            "type": "string",
+            "enum": ["current", "today", "week"],
+            "description": (
+                "天气时间范围："
+                "current=当前，today=今天，week=未来7天"
+            ),
+        },
+    },
+    "required": ["city", "time_range"],
+}
+
+TOOL_CONFIG = {
+    # 外部 HTTP（地理编码 + 天气 API），给足超时但保留重试
+    "timeout": 15,
+    "retries": 1,
+    "quota_per_minute": 60,
+}

@@ -73,6 +73,20 @@ var (
 	ErrRateLimited = &AppError{
 		Code: "RATE_LIMITED", Message: "Too many requests, please try again later", Status: http.StatusTooManyRequests,
 	}
+	// 单用户并发 SSE 数已达上限（同属 429，但错误码不同，便于前端区分提示）
+	ErrStreamLimitReached = &AppError{
+		Code:    "STREAM_LIMIT_REACHED",
+		Message: "Too many concurrent streams, please wait for the current one to finish",
+		Status:  http.StatusTooManyRequests,
+	}
+	// P3 计费：当日配额用尽。
+	// 同属 429 但语义与限流完全不同：限流是「太快了，等一会」，
+	// 配额是「今天的额度用完了，明天再来或升级套餐」——前端要分开提示。
+	ErrQuotaExceeded = &AppError{
+		Code:    "QUOTA_EXCEEDED",
+		Message: "Daily quota exceeded, please upgrade your plan or try again tomorrow",
+		Status:  http.StatusTooManyRequests,
+	}
 
 	// 500 Internal Server Error
 	ErrInternal = &AppError{

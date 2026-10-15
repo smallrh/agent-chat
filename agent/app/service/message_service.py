@@ -2,6 +2,8 @@ import logging
 import uuid
 
 from app.core.config import settings
+from typing import Any
+
 from app.kafka.events import MemoryEvent
 from app.repo.outbox_repo import outbox_repo
 
@@ -39,8 +41,13 @@ class MessageService:
         user_id: int,
         conversation_id: str,
         content: str,
+        metadata: dict[str, Any] | None = None,
     ) -> str:
-        """落一条 user 消息到 outbox。返回 message_id。"""
+        """落一条 user 消息到 outbox。返回 message_id。
+
+        metadata：P2 多模态起，用户消息也可能携带附件（metadata.attachments），
+        刷新后前端要靠它把图片/文件卡片渲染回来。
+        """
 
         await self._ensure_repo()
 
@@ -54,6 +61,7 @@ class MessageService:
             message_id=message_id,
             role="user",
             content=content,
+            metadata=metadata or {},
         )
 
         await self._outbox_insert(event)
@@ -65,6 +73,7 @@ class MessageService:
         user_id: int,
         conversation_id: str,
         content: str,
+        metadata: dict[str, Any] | None = None,
     ) -> str:
         """落一条 assistant 消息到 outbox。返回 message_id。"""
 
@@ -80,6 +89,7 @@ class MessageService:
             message_id=message_id,
             role="assistant",
             content=content,
+            metadata=metadata or {},
         )
 
         await self._outbox_insert(event)

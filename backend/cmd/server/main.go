@@ -99,17 +99,27 @@ func main() {
 	// -------------------------------------------------------
 	// 8. Router
 	// -------------------------------------------------------
-	r := router.New(authHandler, healthHandler, tokenSvc, agentClient, rateLimitSvc)
+	conversationHandler := handler.NewConversationHandler(agentClient)
+	// WithDatabase 启用 P3 计费/配额/管理后台；不注入时这些路由整体不注册
+	r := router.New(
+		authHandler, healthHandler, tokenSvc, agentClient,
+		rateLimitSvc, conversationHandler,
+		router.WithDatabase(database),
+	)
 
 	// -------------------------------------------------------
 	// 9. 优雅启动 + 优雅关闭
 	// -------------------------------------------------------
 	addr := fmt.Sprintf(":%d", cfg.Port)
+	// ★ WriteTimeout 必须 >= AGENT_SSE_TIMEOUT：
+	// http.Server.WriteTimeout 从「请求读完」起算，覆盖**整个响应写过程**，
+	// SSE 长生成会在旧值 30s 处被硬切（客户端表现为「回答到一半断掉」）。
+	// 现在由 HTTP_WRITE_TIMEOUT 控制（默认 15 分钟，≥ AGENT_SSE_TIMEOUT 默认 10 分钟）。
 	srv := &http.Server{
 		Addr:         addr,
 		Handler:      r.Handler(),
 		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
+		WriteTimeout: cfg.ServerWriteTimeout,
 		IdleTimeout:  120 * time.Second,
 	}
 

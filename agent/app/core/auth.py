@@ -19,32 +19,23 @@ import asyncpg
 from fastapi import Depends, Header, HTTPException, status
 
 from app.core.config import settings
+from app.repo.pg import close_pool as close_shared_pool, get_pool
 
 
 logger = logging.getLogger(__name__)
 
 
 # --------------------------------------------------------------
-# asyncpg Pool 懒启动（和 MessageRepository / MemoryRepository 各自独立）
+# PG 连接池：直接用进程级共享池（app/repo/pg.py）
+#
+# 改造前这里自己建了一个「小池」，和其它仓储的池互不相干 —— 全进程一度有
+# 9 个独立 asyncpg 池（PG 侧连接数 ≈ 9 × PG_POOL_SIZE，热重载再翻倍）。
+# 现在统一共享一个池，由 lifespan shutdown 的 close_pool() 统一关闭。
 # --------------------------------------------------------------
 
-_pool: asyncpg.Pool | None = None
-
-
 async def _get_pool() -> asyncpg.Pool:
-    """返回全局 PG 连接池（懒启动，只建一次）。"""
-    global _pool
-    if _pool is None:
-        _pool = await asyncpg.create_pool(
-            host=settings.PG_HOST,
-            port=settings.PG_PORT,
-            database=settings.PG_DATABASE,
-            user=settings.PG_USER,
-            password=settings.PG_PASSWORD,
-            min_size=1,
-            max_size=max(2, settings.PG_POOL_SIZE // 4),  # 自己的小池子，不跟别人抢
-        )
-    return _pool
+    """返回全局共享 PG 连接池（幂等，见 app/repo/pg.py）。"""
+    return await get_pool()
 
 
 # --------------------------------------------------------------
@@ -127,9 +118,6 @@ async def get_current_user_id(
     return user_id
 
 
-async def close_pool():
-    """lifespan shutdown 时调用。"""
-    global _pool
-    if _pool:
-        await _pool.close()
-        _pool = None
+async def close_pool() -> None:
+    """lifespan shutdown 时调用 —— 关闭的是**共享池**，故只能进程退出时调一次。"""
+    await close_shared_pool()
